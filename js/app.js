@@ -84,7 +84,8 @@ function Toast({ toasts, onRemove }) {
 function Navbar({ currentSheet, sheets, onSheetChange, onRefresh, isLoading, isConnected, currentPage }) {
     const navLinks = [
         { hash: '#home', label: 'Dashboard', icon: 'fa-th-large' },
-        { hash: '#tracer-study', label: 'Tracer Study', icon: 'fa-clipboard-list' }
+        { hash: '#tracer-study', label: 'Tracer Study', icon: 'fa-clipboard-list' },
+        { hash: '#monev', label: 'Monev', icon: 'fa-chart-line' }
     ];
 
     return React.createElement('nav', { className: 'navbar' },
@@ -792,39 +793,9 @@ function HashRouter() {
 
     switch (hash) {
         case '#tracer-study':
-            return React.createElement(React.Fragment, null,
-                React.createElement('nav', { className: 'navbar' },
-                    React.createElement('div', { className: 'navbar-left' },
-                        React.createElement('div', { className: 'navbar-brand' },
-                            React.createElement('div', { className: 'navbar-icon' },
-                                React.createElement('i', { className: 'fas fa-graduation-cap' })
-                            ),
-                            React.createElement('div', null,
-                                React.createElement('div', { className: 'navbar-title' }, 'Dashboard Alumni'),
-                                React.createElement('div', { className: 'navbar-subtitle' }, 'Akuntansi 2025')
-                            )
-                        ),
-                        React.createElement('div', { className: 'navbar-nav' },
-                            React.createElement('a', {
-                                href: '#home',
-                                className: 'nav-link'
-                            },
-                                React.createElement('i', { className: 'fas fa-th-large' }),
-                                'Dashboard'
-                            ),
-                            React.createElement('a', {
-                                href: '#tracer-study',
-                                className: 'nav-link active'
-                            },
-                                React.createElement('i', { className: 'fas fa-clipboard-list' }),
-                                'Tracer Study'
-                            )
-                        )
-                    ),
-                    React.createElement('div', { className: 'navbar-actions' })
-                ),
-                React.createElement(TracerStudyPage)
-            );
+            return React.createElement(TracerStudyPage);
+        case '#monev':
+            return React.createElement(MonevPage);
         case '#home':
         default:
             return React.createElement(App);

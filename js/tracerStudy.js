@@ -12,12 +12,30 @@
 
 const { useState: tsUseState, useEffect: tsUseEffect, useCallback: tsUseCallback, useMemo: tsUseMemo, useRef: tsUseRef } = React;
 
+function TracerSkeletonCard() {
+    return React.createElement('div', { className: 'tracer-card skeleton-card' },
+        React.createElement('div', { className: 'tracer-card-header' },
+            React.createElement('div', { className: 'tracer-card-avatar skeleton-avatar shimmer' }),
+            React.createElement('div', { className: 'skeleton-badge shimmer' })
+        ),
+        React.createElement('div', { className: 'tracer-card-body' },
+            React.createElement('div', { className: 'skeleton-text shimmer', style: { width: '80%', height: '18px', marginBottom: '8px', borderRadius: '4px' } }),
+            React.createElement('div', { className: 'skeleton-text shimmer', style: { width: '40%', height: '14px', borderRadius: '4px' } }),
+            React.createElement('div', { className: 'tracer-card-actions', style: { marginTop: '12px' } },
+                React.createElement('div', { className: 'skeleton-button shimmer', style: { width: '110px', height: '32px', borderRadius: '6px' } }),
+                React.createElement('div', { className: 'skeleton-button shimmer', style: { width: '120px', height: '32px', borderRadius: '6px' } })
+            )
+        )
+    );
+}
+
 // ============================================
 // Tracer Study Page (Main Component)
 // ============================================
 function TracerStudyPage() {
     const [alumni, setAlumni] = tsUseState([]);
     const [tracerNIMs, setTracerNIMs] = tsUseState([]);
+    const [reportData, setReportData] = tsUseState({});
     const [sheets, setSheets] = tsUseState([]);
     const [selectedSheet, setSelectedSheet] = tsUseState(CONFIG.DEFAULT_SHEET);
     const [isLoading, setIsLoading] = tsUseState(true);
@@ -86,6 +104,26 @@ function TracerStudyPage() {
                 addToast('Sheet "' + tracerSheet + '" belum ditemukan. Pastikan sheet sudah dibuat.', 'warning');
             }
 
+            // Fetch Report data
+            setLoadingStatus('Mengambil data Report...');
+            try {
+                const reportResult = await API.fetchData('Report');
+                const reportDict = {};
+                if (reportResult.data) {
+                    reportResult.data.forEach(row => {
+                        const nim = String(row['2'] || '').trim();
+                        const masalah = row['3'] || '';
+                        if (nim && masalah) {
+                            reportDict[nim] = masalah;
+                        }
+                    });
+                }
+                setReportData(reportDict);
+            } catch (reportErr) {
+                console.error('Report sheet error:', reportErr);
+                setReportData({});
+            }
+
             setIsConnected(true);
             setLoadingStatus('Connected');
         } catch (error) {
@@ -136,21 +174,68 @@ function TracerStudyPage() {
         return 'Hubungi';
     };
 
+    const handleReportMasalah = async (alumniData) => {
+        const { value: masalah } = await Swal.fire({
+            title: 'Report Masalah',
+            input: 'select',
+            inputOptions: {
+                'No WA Salah': 'No WA Salah',
+                'Belum Ada No WA': 'Belum Ada No WA',
+                'Belum Kerja': 'Belum Kerja',
+                'Lainnya': 'Lainnya'
+            },
+            inputPlaceholder: 'Pilih Masalah',
+            showCancelButton: true,
+            confirmButtonText: 'Kirim',
+            cancelButtonText: 'Batal'
+        });
+
+        if (masalah) {
+            setIsLoading(true);
+            try {
+                await API.createRow('Report', { nim: alumniData.nim, masalah: masalah });
+                addToast('Report berhasil dikirim', 'success');
+                // Refresh data to show latest report state
+                await loadData(selectedSheet);
+            } catch (error) {
+                console.error('Report error:', error);
+                addToast('Gagal mengirim report: ' + error.message, 'error');
+                setIsLoading(false); // only needed if loadData wasn't called
+            }
+        }
+    };
+
     // Cross-reference: build alumni list with tracer status
     const alumniWithStatus = tsUseMemo(() => {
         return alumni.map(a => ({
             ...a,
-            filled: a.nim && tracerNIMs.includes(a.nim)
+            filled: a.nim && tracerNIMs.includes(a.nim),
+            masalah: reportData[a.nim] || null
         }));
-    }, [alumni, tracerNIMs]);
+    }, [alumni, tracerNIMs, reportData]);
 
     // Stats
     const stats = tsUseMemo(() => {
         const total = alumniWithStatus.length;
         const filled = alumniWithStatus.filter(a => a.filled).length;
         const notFilled = total - filled;
+        
+        // Calculate new stats based on the masalah property
+        const waBermasalah = alumniWithStatus.filter(a => 
+            a.masalah === 'No WA Salah' || a.masalah === 'Belum Ada No WA'
+        ).length;
+        
+        const belumKerja = alumniWithStatus.filter(a => 
+            a.masalah === 'Belum Kerja'
+        ).length;
+
+        // Calculate percentages
         const pct = total > 0 ? Math.round(filled / total * 100) : 0;
-        return { total, filled, notFilled, pct };
+        const pctWA = total > 0 ? Math.round(waBermasalah / total * 100) : 0;
+        const pctKerja = total > 0 ? Math.round(belumKerja / total * 100) : 0;
+        const pctTotalResponse = pct + pctWA + pctKerja;
+
+        return { total, filled, notFilled, pct, waBermasalah, belumKerja, pctWA, pctKerja, pctTotalResponse };
     }, [alumniWithStatus]);
 
     // Filter & Search
@@ -176,6 +261,16 @@ function TracerStudyPage() {
     // Render
     // ============================================
     return React.createElement(React.Fragment, null,
+        React.createElement(Navbar, {
+            currentSheet: selectedSheet,
+            sheets: sheets,
+            onSheetChange: handleSheetChange,
+            onRefresh: handleRefresh,
+            isLoading: isLoading,
+            isConnected: isConnected,
+            currentPage: '#tracer-study',
+            loadingText: loadingStatus
+        }),
         React.createElement(Toast, { toasts, onRemove: removeToast }),
         React.createElement('div', { className: 'container' },
 
@@ -188,34 +283,6 @@ function TracerStudyPage() {
                     ),
                     React.createElement('p', { className: 'page-subtitle' },
                         'Penelusuran status pengisian tracer study alumni'
-                    )
-                ),
-                React.createElement('div', { className: 'page-header-actions' },
-                    React.createElement('div', { 
-                        className: `connection-status ${isLoading ? 'loading' : (isConnected ? 'online' : 'offline')}`,
-                        style: isLoading ? { background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6' } : {} 
-                    },
-                        isLoading 
-                            ? React.createElement('i', { className: 'fas fa-spinner fa-spin', style: { marginRight: '4px' } }) 
-                            : React.createElement('span', { className: 'dot' }),
-                        loadingStatus
-                    ),
-                    sheets.length > 0 && React.createElement('select', {
-                        className: 'navbar-sheet-select',
-                        value: selectedSheet,
-                        onChange: e => handleSheetChange(e.target.value)
-                    },
-                        sheets.map(s =>
-                            React.createElement('option', { key: s, value: s }, s)
-                        )
-                    ),
-                    React.createElement('button', {
-                        className: `btn btn-secondary btn-refresh ${isLoading ? 'loading' : ''}`,
-                        onClick: handleRefresh,
-                        disabled: isLoading,
-                        title: 'Refresh Data'
-                    },
-                        React.createElement('i', { className: 'fas fa-sync-alt' })
                     )
                 )
             ),
@@ -247,12 +314,52 @@ function TracerStudyPage() {
                     React.createElement('div', { className: 'stat-detail' }, (100 - stats.pct) + '% dari total alumni')
                 ),
                 React.createElement('div', { className: 'stat-card' },
+                    React.createElement('div', { className: 'stat-icon' },
+                        React.createElement('i', { className: 'fas fa-phone-slash' })
+                    ),
+                    React.createElement('div', { className: 'stat-label' }, 'No WA Bermasalah'),
+                    React.createElement('div', { className: 'stat-value', style: { color: '#ef4444' } }, stats.waBermasalah),
+                    React.createElement('div', { className: 'stat-detail' }, 'Salah / Belum ada No WA')
+                ),
+                React.createElement('div', { className: 'stat-card' },
+                    React.createElement('div', { className: 'stat-icon', style: { background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' } },
+                        React.createElement('i', { className: 'fas fa-briefcase' })
+                    ),
+                    React.createElement('div', { className: 'stat-label' }, 'Belum Bekerja'),
+                    React.createElement('div', { className: 'stat-value' }, stats.belumKerja),
+                    React.createElement('div', { className: 'stat-detail' }, 'Status Report "Belum Bekerja"')
+                ),
+                React.createElement('div', { className: 'stat-card' },
                     React.createElement('div', { className: 'stat-icon blue' },
                         React.createElement('i', { className: 'fas fa-chart-pie' })
                     ),
-                    React.createElement('div', { className: 'stat-label' }, 'Tingkat Respon'),
+                    React.createElement('div', { className: 'stat-label' }, 'Tingkat Respon - Keseluruhan'),
+                    React.createElement('div', { className: 'stat-value' }, stats.pctTotalResponse + '%'),
+                    React.createElement('div', { className: 'stat-detail' }, 'Total respon alumni (Mengisi & Report)')
+                ),
+                React.createElement('div', { className: 'stat-card' },
+                    React.createElement('div', { className: 'stat-icon', style: { background: 'rgba(16, 185, 129, 0.15)', color: '#10b981' } },
+                        React.createElement('i', { className: 'fas fa-chart-line' })
+                    ),
+                    React.createElement('div', { className: 'stat-label' }, 'Tingkat Respon - Yang Mengisi'),
                     React.createElement('div', { className: 'stat-value' }, stats.pct + '%'),
-                    React.createElement('div', { className: 'stat-detail' }, 'Progress pengisian tracer study')
+                    React.createElement('div', { className: 'stat-detail' }, 'Dari pengisian form Tracer Study')
+                ),
+                React.createElement('div', { className: 'stat-card' },
+                    React.createElement('div', { className: 'stat-icon', style: { background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' } },
+                        React.createElement('i', { className: 'fas fa-chart-line' })
+                    ),
+                    React.createElement('div', { className: 'stat-label' }, 'Tingkat Respon - WA Bermasalah'),
+                    React.createElement('div', { className: 'stat-value' }, stats.pctWA + '%'),
+                    React.createElement('div', { className: 'stat-detail' }, 'Dari laporan WA Error')
+                ),
+                React.createElement('div', { className: 'stat-card' },
+                    React.createElement('div', { className: 'stat-icon', style: { background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b' } },
+                        React.createElement('i', { className: 'fas fa-chart-line' })
+                    ),
+                    React.createElement('div', { className: 'stat-label' }, 'Tingkat Respon - Belum Bekerja'),
+                    React.createElement('div', { className: 'stat-value' }, stats.pctKerja + '%'),
+                    React.createElement('div', { className: 'stat-detail' }, 'Dari laporan alumni belum bekerja')
                 )
             ),
 
@@ -309,9 +416,8 @@ function TracerStudyPage() {
 
             // Content: Loading or Cards
             isLoading && alumni.length === 0
-                ? React.createElement('div', { className: 'loading-screen', style: { height: '300px' } },
-                    React.createElement('div', { className: 'loading-spinner' }),
-                    React.createElement('div', { className: 'loading-text' }, 'Memuat data tracer study...')
+                ? React.createElement('div', { className: 'tracer-cards-grid' },
+                    Array.from({ length: 8 }).map((_, idx) => React.createElement(TracerSkeletonCard, { key: idx }))
                 )
                 : filteredAlumni.length === 0
                     ? React.createElement('div', { className: 'table-wrapper' },
@@ -340,10 +446,15 @@ function TracerStudyPage() {
                                         React.createElement('i', { className: 'fas fa-user-graduate' })
                                     ),
                                     React.createElement('div', {
-                                        className: `tracer-card-status ${a.filled ? 'status-filled' : 'status-not-filled'}`
+                                        className: `tracer-card-status ${a.filled ? 'status-filled' : (a.masalah ? 'status-reported' : 'status-not-filled')}`
                                     },
-                                        React.createElement('i', { className: `fas ${a.filled ? 'fa-check-circle' : 'fa-times-circle'}` }),
-                                        a.filled ? 'Sudah Mengisi' : 'Belum Mengisi'
+                                        React.createElement('i', { className: `fas ${a.filled ? 'fa-check-circle' : (a.masalah ? 'fa-exclamation-triangle' : 'fa-times-circle')}` }),
+                                        a.filled ? 'Sudah Mengisi' : (a.masalah ? a.masalah : 'Belum Mengisi'),
+                                        (a.filled && a.masalah) && React.createElement('i', { 
+                                            className: 'fas fa-exclamation-triangle', 
+                                            style: { color: '#ef4444', marginLeft: '4px' },
+                                            title: 'Alumni ini memiliki masalah: ' + a.masalah 
+                                        })
                                     )
                                 ),
                                 React.createElement('div', { className: 'tracer-card-body' },
@@ -352,8 +463,8 @@ function TracerStudyPage() {
                                         React.createElement('i', { className: 'fas fa-id-badge' }),
                                         a.nim || '-'
                                     ),
-                                    !a.filled && a.waLink && React.createElement('div', { className: 'tracer-card-actions' },
-                                        React.createElement('a', {
+                                    !a.filled && React.createElement('div', { className: 'tracer-card-actions' },
+                                        a.waLink && React.createElement('a', {
                                             className: 'tracer-card-wa-btn',
                                             href: a.waLink,
                                             target: '_blank',
@@ -363,12 +474,21 @@ function TracerStudyPage() {
                                             React.createElement('i', { className: 'fab fa-whatsapp' }),
                                             formatWANumber(a.waLink)
                                         ),
-                                        React.createElement('button', {
+                                        a.waLink && React.createElement('button', {
                                             className: 'tracer-card-wa-copy-btn',
                                             onClick: () => handleCopyWA(a.waLink),
                                             title: 'Copy Link WA'
                                         },
                                             React.createElement('i', { className: 'far fa-copy' })
+                                        ),
+                                        React.createElement('button', {
+                                            className: a.waLink ? 'tracer-card-wa-copy-btn' : 'tracer-card-wa-btn',
+                                            style: { background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', justifyContent: 'center' },
+                                            onClick: () => handleReportMasalah(a),
+                                            title: 'Report Masalah'
+                                        },
+                                            React.createElement('i', { className: 'fas fa-exclamation-triangle' }),
+                                            !a.waLink ? ' Report Masalah' : ''
                                         )
                                     )
                                 )
