@@ -95,8 +95,8 @@ function Navbar({ currentSheet, sheets, onSheetChange, onRefresh, isLoading, isC
                     React.createElement('i', { className: 'fas fa-graduation-cap' })
                 ),
                 React.createElement('div', null,
-                    React.createElement('div', { className: 'navbar-title' }, 'Dashboard Alumni'),
-                    React.createElement('div', { className: 'navbar-subtitle' }, 'Akuntansi 2025')
+                    React.createElement('div', { className: 'navbar-title' }, 'SAKTI'),
+                    React.createElement('div', { className: 'navbar-subtitle' }, 'Sistem Alumni Akuntansi Terintegrasi')
                 )
             ),
             React.createElement('div', { className: 'navbar-nav' },

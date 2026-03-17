@@ -96,7 +96,7 @@ function MonevPage() {
                         React.createElement('i', { className: 'fas fa-chart-pie' })
                     ),
                     React.createElement('div', null,
-                        React.createElement('div', { className: 'navbar-title' }, 'Dashboard Alumni'),
+                        React.createElement('div', { className: 'navbar-title' }, 'SAKTI'),
                         React.createElement('div', { className: 'navbar-subtitle' }, 'Monitoring & Evaluasi')
                     )
                 ),

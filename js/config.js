@@ -1,5 +1,5 @@
 /**
- * Dashboard Alumni Akuntansi 2025 - Configuration
+ * SAKTI "Sistem Alumni Akuntansi Terintegrasi" - Configuration
  */
 const CONFIG = {
   // ============================================
