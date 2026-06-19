@@ -121,6 +121,13 @@ function MonevPage() {
                     },
                         React.createElement('i', { className: 'fas fa-chart-line' }),
                         'Monev'
+                    ),
+                    React.createElement('a', {
+                        href: '#result',
+                        className: 'nav-link'
+                    },
+                        React.createElement('i', { className: 'fas fa-poll' }),
+                        'Result'
                     )
                 )
             ),

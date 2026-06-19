@@ -85,7 +85,8 @@ function Navbar({ currentSheet, sheets, onSheetChange, onRefresh, isLoading, isC
     const navLinks = [
         { hash: '#home', label: 'Dashboard', icon: 'fa-th-large' },
         { hash: '#tracer-study', label: 'Tracer Study', icon: 'fa-clipboard-list' },
-        { hash: '#monev', label: 'Monev', icon: 'fa-chart-line' }
+        { hash: '#monev', label: 'Monev', icon: 'fa-chart-line' },
+        { hash: '#result', label: 'Result', icon: 'fa-poll' }
     ];
 
     return React.createElement('nav', { className: 'navbar' },
@@ -796,6 +797,8 @@ function HashRouter() {
             return React.createElement(TracerStudyPage);
         case '#monev':
             return React.createElement(MonevPage);
+        case '#result':
+            return React.createElement(ResultPage);
         case '#home':
         default:
             return React.createElement(App);
