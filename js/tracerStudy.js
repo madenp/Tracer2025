@@ -182,6 +182,7 @@ function TracerStudyPage() {
                 'No WA Salah': 'No WA Salah',
                 'Belum Ada No WA': 'Belum Ada No WA',
                 'Belum Kerja': 'Belum Kerja',
+                'Menunggu Pengisian': 'Menunggu Pengisian',
                 'Lainnya': 'Lainnya'
             },
             inputPlaceholder: 'Pilih Masalah',
@@ -218,7 +219,6 @@ function TracerStudyPage() {
     const stats = tsUseMemo(() => {
         const total = alumniWithStatus.length;
         const filled = alumniWithStatus.filter(a => a.filled).length;
-        const notFilled = total - filled;
         
         // Calculate new stats based on the masalah property
         const waBermasalah = alumniWithStatus.filter(a => 
@@ -229,13 +229,24 @@ function TracerStudyPage() {
             a.masalah === 'Belum Kerja'
         ).length;
 
+        const menunggu = alumniWithStatus.filter(a => 
+            !a.filled && a.masalah === 'Menunggu Pengisian'
+        ).length;
+
+        // "Belum Mengisi" is now purely not filled and has no masalah reported
+        const notFilled = alumniWithStatus.filter(a => !a.filled && !a.masalah).length;
+
         // Calculate percentages
         const pct = total > 0 ? Math.round(filled / total * 100) : 0;
         const pctWA = total > 0 ? Math.round(waBermasalah / total * 100) : 0;
         const pctKerja = total > 0 ? Math.round(belumKerja / total * 100) : 0;
+        const pctNotFilled = total > 0 ? Math.round(notFilled / total * 100) : 0;
         const pctTotalResponse = pct + pctWA + pctKerja;
 
-        return { total, filled, notFilled, pct, waBermasalah, belumKerja, pctWA, pctKerja, pctTotalResponse };
+        const progressCount = filled + belumKerja;
+        const progressPct = total > 0 ? Math.round(progressCount / total * 100) : 0;
+
+        return { total, filled, notFilled, pct, waBermasalah, belumKerja, pctWA, pctKerja, pctTotalResponse, menunggu, pctNotFilled, progressCount, progressPct };
     }, [alumniWithStatus]);
 
     // Filter & Search
@@ -244,7 +255,9 @@ function TracerStudyPage() {
 
         // Filter by status
         if (filterStatus === 'filled') list = list.filter(a => a.filled);
-        if (filterStatus === 'not-filled') list = list.filter(a => !a.filled);
+        if (filterStatus === 'not-filled') list = list.filter(a => !a.filled && !a.masalah);
+        if (filterStatus === 'waiting') list = list.filter(a => !a.filled && a.masalah === 'Menunggu Pengisian');
+        if (filterStatus === 'belum-kerja') list = list.filter(a => !a.filled && a.masalah === 'Belum Kerja');
 
         // Search
         if (searchQuery) {
@@ -311,7 +324,7 @@ function TracerStudyPage() {
                     ),
                     React.createElement('div', { className: 'stat-label' }, 'Belum Mengisi'),
                     React.createElement('div', { className: 'stat-value' }, stats.notFilled),
-                    React.createElement('div', { className: 'stat-detail' }, (100 - stats.pct) + '% dari total alumni')
+                    React.createElement('div', { className: 'stat-detail' }, stats.pctNotFilled + '% dari total alumni')
                 ),
                 React.createElement('div', { className: 'stat-card' },
                     React.createElement('div', { className: 'stat-icon' },
@@ -368,11 +381,11 @@ function TracerStudyPage() {
                 React.createElement('div', { className: 'tracer-progress-bar' },
                     React.createElement('div', {
                         className: 'tracer-progress-fill',
-                        style: { width: stats.pct + '%' }
+                        style: { width: stats.progressPct + '%' }
                     })
                 ),
                 React.createElement('div', { className: 'tracer-progress-label' },
-                    stats.filled + ' / ' + stats.total + ' alumni telah mengisi tracer study'
+                    stats.progressCount + ' / ' + stats.total + ' alumni telah mengisi tracer study (Sudah + Belum Bekerja)'
                 )
             ),
 
@@ -409,6 +422,20 @@ function TracerStudyPage() {
                         },
                             React.createElement('i', { className: 'fas fa-times-circle', style: { color: filterStatus === 'not-filled' ? '#fff' : '#f59e0b' } }),
                             'Belum (' + stats.notFilled + ')'
+                        ),
+                        React.createElement('button', {
+                            className: `btn btn-sm ${filterStatus === 'waiting' ? 'btn-primary' : 'btn-secondary'}`,
+                            onClick: () => setFilterStatus('waiting')
+                        },
+                            React.createElement('i', { className: 'fas fa-clock', style: { color: filterStatus === 'waiting' ? '#fff' : '#3b82f6' } }),
+                            'Menunggu (' + stats.menunggu + ')'
+                        ),
+                        React.createElement('button', {
+                            className: `btn btn-sm ${filterStatus === 'belum-kerja' ? 'btn-primary' : 'btn-secondary'}`,
+                            onClick: () => setFilterStatus('belum-kerja')
+                        },
+                            React.createElement('i', { className: 'fas fa-briefcase', style: { color: filterStatus === 'belum-kerja' ? '#fff' : '#ef4444' } }),
+                            'Belum Bekerja (' + stats.belumKerja + ')'
                         )
                     )
                 )
@@ -446,9 +473,23 @@ function TracerStudyPage() {
                                         React.createElement('i', { className: 'fas fa-user-graduate' })
                                     ),
                                     React.createElement('div', {
-                                        className: `tracer-card-status ${a.filled ? 'status-filled' : (a.masalah ? 'status-reported' : 'status-not-filled')}`
+                                        className: `tracer-card-status ${
+                                            a.filled 
+                                                ? 'status-filled' 
+                                                : (a.masalah 
+                                                    ? (a.masalah === 'Menunggu Pengisian' ? 'status-waiting' : 'status-reported') 
+                                                    : 'status-not-filled')
+                                        }`
                                     },
-                                        React.createElement('i', { className: `fas ${a.filled ? 'fa-check-circle' : (a.masalah ? 'fa-exclamation-triangle' : 'fa-times-circle')}` }),
+                                        React.createElement('i', { 
+                                            className: `fas ${
+                                                a.filled 
+                                                    ? 'fa-check-circle' 
+                                                    : (a.masalah 
+                                                        ? (a.masalah === 'Menunggu Pengisian' ? 'fa-clock' : 'fa-exclamation-triangle') 
+                                                        : 'fa-times-circle')
+                                            }` 
+                                        }),
                                         a.filled ? 'Sudah Mengisi' : (a.masalah ? a.masalah : 'Belum Mengisi'),
                                         (a.filled && a.masalah) && React.createElement('i', { 
                                             className: 'fas fa-exclamation-triangle', 
