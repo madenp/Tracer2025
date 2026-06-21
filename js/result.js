@@ -50,8 +50,28 @@ function ResultPage() {
             
             const tracerRows = tracerRes.data || [];
             
-            // 4. Compile stats
+            // 4. Compile stats and check duplicates
             const totalRespondents = tracerRows.filter(row => String(row['4'] || '').trim() !== '').length; // key '4' is NIM in Tracer Study
+            
+            // Find duplicate NIMs and names
+            const nimCounts = {};
+            tracerRows.forEach(row => {
+                const nim = String(row['4'] || '').trim();
+                if (nim) {
+                    nimCounts[nim] = (nimCounts[nim] || 0) + 1;
+                }
+            });
+            
+            const duplicates = [];
+            const seenNims = new Set();
+            tracerRows.forEach(row => {
+                const nim = String(row['4'] || '').trim();
+                const nama = String(row['5'] || '').trim() || 'Tanpa Nama';
+                if (nim && nimCounts[nim] > 1 && !seenNims.has(nim)) {
+                    duplicates.push({ nim, nama });
+                    seenNims.add(nim);
+                }
+            });
             
             const categories = {};
             tracerRows.forEach(row => {
@@ -87,7 +107,8 @@ function ResultPage() {
             
             setData({
                 totalRespondents,
-                categories: Object.values(categories)
+                categories: Object.values(categories),
+                duplicates
             });
             setIsConnected(true);
         } catch (err) {
@@ -254,7 +275,14 @@ function ResultPage() {
                                     React.createElement('i', { className: 'fas fa-users-line' })
                                 ),
                                 React.createElement('div', { className: 'stat-label' }, 'Jumlah Responden'),
-                                React.createElement('div', { className: 'stat-value' }, data.totalRespondents),
+                                React.createElement('div', { className: 'stat-value', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                                    data.totalRespondents,
+                                    data.duplicates && data.duplicates.length > 0 && React.createElement('i', {
+                                        className: 'fas fa-exclamation-triangle',
+                                        style: { color: '#f59e0b', fontSize: '18px', cursor: 'pointer' },
+                                        title: `Terdapat data ganda atas nama:\n${data.duplicates.map(d => `- ${d.nama} (${d.nim})`).join('\n')}`
+                                    })
+                                ),
                                 React.createElement('div', { className: 'stat-detail' }, 'Total alumni yang mengisi kuesioner Tracer Study')
                             )
                         ),

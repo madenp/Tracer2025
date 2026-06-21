@@ -44,18 +44,24 @@ function MonevPage() {
             setIsLoading(false);
 
             // 3. Fetch Tracer Study Data once
-            let tracerNIMs = [];
+            let rawTracerData = [];
+            let tracerNimsRaw = [];
             try {
                 const resTracer = await fetch(`${CONFIG.APPS_SCRIPT_URL}?action=read&sheet=${encodeURIComponent(CONFIG.TRACER_STUDY_SHEET)}`);
                 const jsonTracer = await resTracer.json();
                 if (jsonTracer.success && jsonTracer.data) {
-                    // Extract NIMs from Tracer Study (col 4)
-                    tracerNIMs = jsonTracer.data.map(row => String(row['4'] || '').trim());
+                    rawTracerData = jsonTracer.data;
+                    tracerNimsRaw = rawTracerData.map(row => String(row['4'] || '').trim()).filter(Boolean);
                 }
             } catch (e) {
                 console.error('Error fetching Tracer Study sheet', e);
                 // Can continue without crashing entirely, but filled counts will be 0
             }
+
+            const tracerNimCounts = {};
+            tracerNimsRaw.forEach(nim => {
+                tracerNimCounts[nim] = (tracerNimCounts[nim] || 0) + 1;
+            });
 
             // 4. Construct concurrent requests to get filled rows for each period
             const updatedPeriods = await Promise.all(periodeData.map(async (p) => {
@@ -63,17 +69,25 @@ function MonevPage() {
                     const resSheet = await fetch(`${CONFIG.APPS_SCRIPT_URL}?action=read&sheet=${encodeURIComponent(p.periode)}`);
                     const jsonSheet = await resSheet.json();
                     if (jsonSheet.success && jsonSheet.data) {
-                        // Count how many alumni in this period have their NIM in the Tracer Study list
-                        const filledCount = jsonSheet.data.filter(row => {
+                        let filledCount = 0;
+                        const duplicatesInPeriod = [];
+                        jsonSheet.data.forEach(row => {
                             const nim = String(row['6'] || '').trim();
-                            return nim && tracerNIMs.includes(nim);
-                        }).length;
-                        return { ...p, filled: filledCount };
+                            const nama = String(row['2'] || '').trim() || 'Tanpa Nama';
+                            if (nim) {
+                                const count = tracerNimCounts[nim] || 0;
+                                filledCount += count;
+                                if (count > 1) {
+                                    duplicatesInPeriod.push({ nim, nama });
+                                }
+                            }
+                        });
+                        return { ...p, filled: filledCount, duplicates: duplicatesInPeriod };
                     }
-                    return { ...p, filled: 0 };
+                    return { ...p, filled: 0, duplicates: [] };
                 } catch (e) {
                     console.error('Error fetching sheet', p.periode, e);
-                    return { ...p, filled: 0 }; // Set to 0 on error, remove skeleton
+                    return { ...p, filled: 0, duplicates: [] }; // Set to 0 on error, remove skeleton
                 }
             }));
 
@@ -178,6 +192,20 @@ function MonevPage() {
                                 const totalFilled = isTotalLoading ? 0 : periods.reduce((sum, p) => sum + p.filled, 0);
                                 const totalPct = isTotalLoading ? 0 : (totalTarget > 0 ? Math.min(100, Math.round((totalFilled / totalTarget) * 100)) : 0);
                                 
+                                // Collect all duplicates across all loaded periods
+                                const allDuplicates = [];
+                                const seenNims = new Set();
+                                periods.forEach(p => {
+                                    if (p.duplicates) {
+                                        p.duplicates.forEach(d => {
+                                            if (!seenNims.has(d.nim)) {
+                                                allDuplicates.push(d);
+                                                seenNims.add(d.nim);
+                                            }
+                                        });
+                                    }
+                                });
+                                
                                 return React.createElement('div', { className: 'monev-grid', style: { marginBottom: '20px' } },
                                     React.createElement('div', { className: 'monev-card monev-card-total' },
                                         React.createElement('div', { className: 'monev-card-header' },
@@ -199,7 +227,14 @@ function MonevPage() {
                                                 React.createElement('span', { className: 'monev-stat-label' }, 'Total Sudah Mengisi'),
                                                 isTotalLoading
                                                     ? React.createElement('div', { className: 'skeleton-box', style: { width: '40px', height: '28px', borderRadius: '4px' } })
-                                                    : React.createElement('span', { className: 'monev-stat-value' }, totalFilled)
+                                                    : React.createElement('div', { className: 'monev-stat-value', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                                                        totalFilled,
+                                                        allDuplicates.length > 0 && React.createElement('i', {
+                                                            className: 'fas fa-exclamation-triangle text-warning',
+                                                            style: { color: '#f59e0b', fontSize: '16px', cursor: 'pointer' },
+                                                            title: `Terdapat data ganda atas nama:\n${allDuplicates.map(d => `- ${d.nama} (${d.nim})`).join('\n')}`
+                                                        })
+                                                    )
                                             ),
                                             React.createElement('div', { className: 'monev-progress-container' },
                                                 React.createElement('div', { className: 'monev-progress-header' },
@@ -246,7 +281,14 @@ function MonevPage() {
                                             React.createElement('span', { className: 'monev-stat-label' }, 'Sudah Mengisi'),
                                             isLoadingValue
                                                 ? React.createElement('div', { className: 'skeleton-box', style: { width: '30px', height: '28px', borderRadius: '4px' } })
-                                                : React.createElement('span', { className: 'monev-stat-value' }, p.filled)
+                                                : React.createElement('div', { className: 'monev-stat-value', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                                                    p.filled,
+                                                    p.duplicates && p.duplicates.length > 0 && React.createElement('i', {
+                                                        className: 'fas fa-exclamation-triangle text-warning',
+                                                        style: { color: '#f59e0b', fontSize: '14px', cursor: 'pointer' },
+                                                        title: `Terdapat data ganda atas nama:\n${p.duplicates.map(d => `- ${d.nama} (${d.nim})`).join('\n')}`
+                                                    })
+                                                )
                                         ),
                                         React.createElement('div', { className: 'monev-progress-container' },
                                             React.createElement('div', { className: 'monev-progress-header' },

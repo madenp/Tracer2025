@@ -96,8 +96,8 @@ function TracerStudyPage() {
             setLoadingStatus('Mencocokan Tracer Study...');
             try {
                 const tracerResult = await API.fetchData(tracerSheet);
-                const tracerData = (tracerResult.data || []).map(row => String(row['4'] || '').trim());
-                setTracerNIMs(tracerData);
+                const rawTracerNIMs = (tracerResult.data || []).map(row => String(row['4'] || '').trim()).filter(Boolean);
+                setTracerNIMs(rawTracerNIMs);
             } catch (tracerErr) {
                 console.error('Tracer sheet error:', tracerErr);
                 setTracerNIMs([]);
@@ -208,9 +208,16 @@ function TracerStudyPage() {
 
     // Cross-reference: build alumni list with tracer status
     const alumniWithStatus = tsUseMemo(() => {
+        // Count occurrences of each NIM in tracerNIMs
+        const tracerCounts = {};
+        tracerNIMs.forEach(nim => {
+            tracerCounts[nim] = (tracerCounts[nim] || 0) + 1;
+        });
+
         return alumni.map(a => ({
             ...a,
-            filled: a.nim && tracerNIMs.includes(a.nim),
+            filled: a.nim && tracerCounts[a.nim] > 0,
+            isDuplicate: a.nim && tracerCounts[a.nim] > 1,
             masalah: reportData[a.nim] || null
         }));
     }, [alumni, tracerNIMs, reportData]);
@@ -219,6 +226,9 @@ function TracerStudyPage() {
     const stats = tsUseMemo(() => {
         const total = alumniWithStatus.length;
         const filled = alumniWithStatus.filter(a => a.filled).length;
+        const duplicateAlumni = alumniWithStatus.filter(a => a.isDuplicate);
+        const duplicateCount = duplicateAlumni.length;
+        const duplicateNames = duplicateAlumni.map(a => a.nama);
         
         // Calculate new stats based on the masalah property
         const waBermasalah = alumniWithStatus.filter(a => 
@@ -246,7 +256,7 @@ function TracerStudyPage() {
         const progressCount = filled + belumKerja;
         const progressPct = total > 0 ? Math.round(progressCount / total * 100) : 0;
 
-        return { total, filled, notFilled, pct, waBermasalah, belumKerja, pctWA, pctKerja, pctTotalResponse, menunggu, pctNotFilled, progressCount, progressPct };
+        return { total, filled, notFilled, pct, waBermasalah, belumKerja, pctWA, pctKerja, pctTotalResponse, menunggu, pctNotFilled, progressCount, progressPct, duplicateCount, duplicateNames };
     }, [alumniWithStatus]);
 
     // Filter & Search
@@ -315,7 +325,14 @@ function TracerStudyPage() {
                         React.createElement('i', { className: 'fas fa-check-circle' })
                     ),
                     React.createElement('div', { className: 'stat-label' }, 'Sudah Mengisi'),
-                    React.createElement('div', { className: 'stat-value' }, stats.filled),
+                    React.createElement('div', { className: 'stat-value', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+                        stats.filled,
+                        stats.duplicateCount > 0 && React.createElement('i', {
+                            className: 'fas fa-exclamation-triangle text-warning',
+                            style: { color: '#f59e0b', fontSize: '18px', cursor: 'pointer' },
+                            title: `Terdapat data ganda pengisian untuk:\n${stats.duplicateNames.map(name => `- ${name}`).join('\n')}`
+                        })
+                    ),
                     React.createElement('div', { className: 'stat-detail' }, stats.pct + '% dari total alumni')
                 ),
                 React.createElement('div', { className: 'stat-card' },
@@ -495,6 +512,11 @@ function TracerStudyPage() {
                                             className: 'fas fa-exclamation-triangle', 
                                             style: { color: '#ef4444', marginLeft: '4px' },
                                             title: 'Alumni ini memiliki masalah: ' + a.masalah 
+                                        }),
+                                        a.isDuplicate && React.createElement('i', { 
+                                            className: 'fas fa-exclamation-triangle', 
+                                            style: { color: '#f59e0b', marginLeft: '6px', cursor: 'pointer' },
+                                            title: 'Terdapat data ganda pengisian di database' 
                                         })
                                     )
                                 ),
